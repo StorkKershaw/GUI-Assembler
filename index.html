@@ -117,28 +117,16 @@
     <script>
       {
         const fieldSpecs = new Map([
-          [
-            "",
-            {
-              rd1Required: false,
-              rs1Required: false,
-              rs2Required: false,
-              imm1Width: 0,
-              imm2Width: 0,
-              instFormat: "",
-              commentFormat: "",
-            },
-          ],
+          ["", {}],
           [
             "ax.Fmul",
             {
               rd1Required: true,
               rs1Required: true,
               rs2Required: true,
-              imm1Width: 5,
               imm2Width: 2,
-              instFormat: ".word imm2_imm1_rs2_rs1_101_rd1_0001011",
-              commentFormat: " # ax.Fmul rd1, rs1, rs2",
+              instFormat: ".word imm2_00000_rs2_rs1_101_rd1_0001011",
+              commentFormat: " # ax.Fmul rd1, rs1, rs2 (mode: imm2)",
             },
           ],
           [
@@ -150,17 +138,14 @@
               imm1Width: 5,
               imm2Width: 2,
               instFormat: ".word imm2_imm1_rs2_rs1_110_rd1_0001011",
-              commentFormat: " # ax.load rd1, imm1(rs1, rs2)",
+              commentFormat: " # ax.load rd1, imm1(rs1, rs2) (mode: imm2)",
             },
           ],
           [
             "ap.branch",
             {
-              rd1Required: false,
-              rs1Required: false,
-              rs2Required: false,
               imm1Width: 17,
-              imm2Width: 0,
+              imm1Signed: true,
               instFormat: ".word imm1_011_00000_0001011",
               commentFormat: " # ap.branch imm1",
             },
@@ -170,9 +155,8 @@
             {
               rd1Required: true,
               rs1Required: true,
-              rs2Required: false,
               imm1Width: 12,
-              imm2Width: 0,
+              imm1Signed: true,
               instFormat: ".word imm1_rs1_100_rd1_0001011",
               commentFormat: " # ap.load rd1, imm1(rs1)",
             },
@@ -310,11 +294,14 @@
 
               imm1Text: "",
               imm1Width: 0,
+              imm1Signed: false,
 
               imm2Text: "",
               imm2Width: 0,
+              imm2Signed: false,
 
               instFormat: "",
+              commentFormat: "",
               instruction: "",
             };
           },
@@ -377,8 +364,10 @@
                 rs2Required: this.rs2Required,
                 rs2: this.rs2,
                 imm1Width: this.imm1Width,
+                imm1Signed: this.imm1Signed,
                 imm1: this.imm1,
                 imm2Width: this.imm2Width,
+                imm2Signed: this.imm2Signed,
                 imm2: this.imm2,
                 instFormat: this.instFormat,
                 commentFormat: this.commentFormat,
@@ -388,13 +377,15 @@
           methods: {
             updateFormWithSpec() {
               const {
-                rd1Required,
-                rs1Required,
-                rs2Required,
-                imm1Width,
-                imm2Width,
-                instFormat,
-                commentFormat,
+                rd1Required = false,
+                rs1Required = false,
+                rs2Required = false,
+                imm1Width = 0,
+                imm1Signed = false,
+                imm2Width = 0,
+                imm2Signed = false,
+                instFormat = "",
+                commentFormat = "",
               } = fieldSpecs.get(this.opcode);
 
               this.rd1Required = rd1Required;
@@ -435,8 +426,8 @@
                   this.rd1Required && ["rd1", this.rd1Name],
                   this.rs1Required && ["rs1", this.rs1Name],
                   this.rs2Required && ["rs2", this.rs2Name],
-                  this.imm1Width && ["imm1", this.imm1],
-                  this.imm2Width && ["imm2", this.imm2],
+                  this.imm1Width && ["imm1", this.imm1Text],
+                  this.imm2Width && ["imm2", this.imm2Text],
                 ].filter(Boolean)
               );
 
