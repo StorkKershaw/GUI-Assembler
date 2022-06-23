@@ -70,7 +70,7 @@
             <b-input-group
               class="mr-2"
               prepend="imm1"
-              :append="`${imm1}&le;${(1 << imm1Width) - 1} (${imm1Width}bits)`"
+              :append="`${imm1Bottom}&le;${imm1Signed}&lt;${imm1Top} (${imm1Width}bits)`"
             >
               <b-form-input
                 v-model="imm1Text"
@@ -81,7 +81,7 @@
             </b-input-group>
             <b-input-group
               prepend="imm2"
-              :append="`${imm2}&le;${(1 << imm2Width) - 1} (${imm2Width}bits)`"
+              :append="`${imm2Bottom}&le;${imm2Signed}&lt;${imm2Top} (${imm2Width}bits)`"
             >
               <b-form-input
                 v-model="imm2Text"
@@ -117,14 +117,13 @@
     <script>
       {
         const fieldSpecs = new Map([
-          ["", {}],
           [
             "ax.Fmul",
             {
               rd1Required: true,
               rs1Required: true,
               rs2Required: true,
-              imm2Width: 2,
+              imm2Type: "u2",
               instFormat: ".word imm2_00000_rs2_rs1_101_rd1_0001011",
               commentFormat: " # ax.Fmul rd1, rs1, rs2 (mode: imm2)",
             },
@@ -135,8 +134,8 @@
               rd1Required: true,
               rs1Required: true,
               rs2Required: true,
-              imm1Width: 5,
-              imm2Width: 2,
+              imm1Type: "u5",
+              imm2Type: "u2",
               instFormat: ".word imm2_imm1_rs2_rs1_110_rd1_0001011",
               commentFormat: " # ax.load rd1, imm1(rs1, rs2) (mode: imm2)",
             },
@@ -144,8 +143,7 @@
           [
             "ap.branch",
             {
-              imm1Width: 17,
-              imm1Signed: true,
+              imm1Type: "s17",
               instFormat: ".word imm1_011_00000_0001011",
               commentFormat: " # ap.branch imm1",
             },
@@ -155,8 +153,7 @@
             {
               rd1Required: true,
               rs1Required: true,
-              imm1Width: 12,
-              imm1Signed: true,
+              imm1Type: "s12",
               instFormat: ".word imm1_rs1_100_rd1_0001011",
               commentFormat: " # ap.load rd1, imm1(rs1)",
             },
@@ -293,12 +290,10 @@
               rs2Options: [{ value: "", text: "rs2" }, ...registers],
 
               imm1Text: "",
-              imm1Width: 0,
-              imm1Signed: false,
+              imm1Type: "u0",
 
               imm2Text: "",
-              imm2Width: 0,
-              imm2Signed: false,
+              imm2Type: "u0",
 
               instFormat: "",
               commentFormat: "",
@@ -336,23 +331,55 @@
               const [rs2Name] = matchArray.slice(1, 2);
               return rs2Name;
             },
-            imm1() {
+            imm1Width() {
+              return +this.imm1Type.slice(1);
+            },
+            imm1Bottom() {
+              return this.imm1Type[0] === "u" ? 0 : -1 << (this.imm1Width - 1);
+            },
+            imm1Top() {
+              return this.imm1Type[0] === "u"
+                ? 1 << this.imm1Width
+                : 1 << (this.imm1Width - 1);
+            },
+            imm1Signed() {
               if (this.imm1Text === "" || this.imm1Width === 0) return 0;
               return Math.trunc(+this.imm1Text);
             },
+            imm1() {
+              return this.imm1Signed >= 0
+                ? this.imm1Signed
+                : (1 << this.imm1Width) + this.imm1Signed;
+            },
             imm1Valid() {
               if (this.imm1Width === 0) return null;
-              const imm1 = this.imm1;
-              return imm1 >= 0 && imm1 < 1 << this.imm1Width;
+              const imm1Signed = this.imm1Signed;
+              return imm1Signed >= this.imm1Bottom && imm1Signed < this.imm1Top;
             },
-            imm2() {
+            imm2Width() {
+              return +this.imm2Type.slice(1);
+            },
+            imm2Bottom() {
+              return this.imm2Type[0] === "u" ? 0 : -1 << (this.imm2Width - 1);
+            },
+            imm2Top() {
+              return this.imm2Type[0] === "u"
+                ? 1 << this.imm2Width
+                : 1 << (this.imm2Width - 1);
+            },
+            imm2Signed() {
               if (this.imm2Text === "" || this.imm2Width === 0) return 0;
               return Math.trunc(+this.imm2Text);
             },
+            imm2() {
+              return this.imm2Signed >= 0
+                ? this.imm2Signed
+                : (1 << this.imm2Width) + this.imm2Signed;
+            },
             imm2Valid() {
               if (this.imm2Width === 0) return null;
-              const imm2 = this.imm2;
-              return imm2 >= 0 && imm2 < 1 << this.imm2Width;
+              const imm2Signed = this.imm2Signed;
+              return imm2Signed >= this.imm2Bottom && imm2Signed < this.imm2Top;
             },
             innerState() {
               return {
@@ -363,12 +390,20 @@
                 rs1: this.rs1,
                 rs2Required: this.rs2Required,
                 rs2: this.rs2,
+                imm1Type: this.imm1Type,
                 imm1Width: this.imm1Width,
+                imm1Bottom: this.imm1Bottom,
+                imm1Top: this.imm1Top,
                 imm1Signed: this.imm1Signed,
                 imm1: this.imm1,
+                imm1Valid: this.imm1Valid,
+                imm2Type: this.imm2Type,
                 imm2Width: this.imm2Width,
+                imm2Bottom: this.imm2Bottom,
+                imm2Top: this.imm2Top,
                 imm2Signed: this.imm2Signed,
                 imm2: this.imm2,
+                imm2Valid: this.imm2Valid,
                 instFormat: this.instFormat,
                 commentFormat: this.commentFormat,
               };
@@ -380,19 +415,17 @@
                 rd1Required = false,
                 rs1Required = false,
                 rs2Required = false,
-                imm1Width = 0,
-                imm1Signed = false,
-                imm2Width = 0,
-                imm2Signed = false,
+                imm1Type = "u0",
+                imm2Type = "u0",
                 instFormat = "",
                 commentFormat = "",
-              } = fieldSpecs.get(this.opcode);
+              } = fieldSpecs.get(this.opcode) || {};
 
               this.rd1Required = rd1Required;
               this.rs1Required = rs1Required;
               this.rs2Required = rs2Required;
-              this.imm1Width = imm1Width;
-              this.imm2Width = imm2Width;
+              this.imm1Type = imm1Type;
+              this.imm2Type = imm2Type;
               this.instFormat = instFormat;
               this.commentFormat = commentFormat;
             },
@@ -426,8 +459,8 @@
                   this.rd1Required && ["rd1", this.rd1Name],
                   this.rs1Required && ["rs1", this.rs1Name],
                   this.rs2Required && ["rs2", this.rs2Name],
-                  this.imm1Width && ["imm1", this.imm1Text],
-                  this.imm2Width && ["imm2", this.imm2Text],
+                  this.imm1Width && ["imm1", this.imm1Signed],
+                  this.imm2Width && ["imm2", this.imm2Signed],
                 ].filter(Boolean)
               );
 
