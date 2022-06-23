@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>GUI Assembler</title>
+
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css"
+      integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn"
+      crossorigin="anonymous"
+    />
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF"
+      crossorigin="anonymous"
+    ></script>
+    <link
+      type="text/css"
+      rel="stylesheet"
+      href="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14"></script>
+    <script src="https://unpkg.com/bootstrap-vue@latest/dist/bootstrap-vue.min.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="mx-auto my-4 p-2 w-75 border rounded d-flex">
+        <div class="mr-2 d-flex flex-column">
+          <b-input-group class="mb-2" prepend="inst">
+            <b-form-select
+              v-model="opcode"
+              :options="opcodeOptions"
+              @change="() => updateFormWithSpec()"
+            ></b-form-select>
+          </b-input-group>
+
+          <b-input-group class="mb-2" prepend="rd1">
+            <b-form-select
+              v-model="rd1Text"
+              :disabled="!rd1Required"
+              :options="rd1Options"
+            ></b-form-select>
+          </b-input-group>
+
+          <div class="d-flex mb-2">
+            <b-input-group class="mr-2" prepend="rs1">
+              <b-form-select
+                v-model="rs1Text"
+                :disabled="!rs1Required"
+                :options="rs1Options"
+              ></b-form-select>
+            </b-input-group>
+            <b-input-group prepend="rs2">
+              <b-form-select
+                v-model="rs2Text"
+                :disabled="!rs2Required"
+                :options="rs2Options"
+              ></b-form-select>
+            </b-input-group>
+          </div>
+
+          <div class="d-flex">
+            <b-input-group
+              class="mr-2"
+              prepend="imm1"
+              :append="`${imm1}&le;${(1 << imm1Width) - 1} (${imm1Width}bits)`"
+            >
+              <b-form-input
+                v-model="imm1Text"
+                :disabled="imm1Width === 0"
+                :state="imm1Valid"
+                placeholder="digit, hex, octet, bin"
+              ></b-form-input>
+            </b-input-group>
+            <b-input-group
+              prepend="imm2"
+              :append="`${imm2}&le;${(1 << imm2Width) - 1} (${imm2Width}bits)`"
+            >
+              <b-form-input
+                v-model="imm2Text"
+                :disabled="imm2Width === 0"
+                :state="imm2Valid"
+                placeholder="digit, hex, octet, bin"
+              ></b-form-input>
+            </b-input-group>
+          </div>
+        </div>
+
+        <b-button variant="primary" @click="() => formatInstruction()">
+          Generate<br />
+          <kbd>Enter</kbd>
+        </b-button>
+      </div>
+
+      <div
+        class="mx-auto mb-4 p-2 w-75 border rounded d-flex align-items-center"
+      >
+        <b-form-input
+          v-model="instruction"
+          class="mr-auto"
+          placeholder="Generated instruction appears here."
+        ></b-form-input>
+      </div>
+
+      <div class="mx-auto p-2 w-75 border rounded d-flex align-items-center">
+        <pre>{{ innerState }}</pre>
+      </div>
+    </div>
+
+    <script>
+      {
+        const fieldSpecs = new Map([
+          [
+            "",
+            {
+              rd1Required: false,
+              rs1Required: false,
+              rs2Required: false,
+              imm1Width: 0,
+              imm2Width: 0,
+              instFormat: "",
+              commentFormat: "",
+            },
+          ],
+          [
+            "ax.Fmul",
+            {
+              rd1Required: true,
+              rs1Required: true,
+              rs2Required: true,
+              imm1Width: 5,
+              imm2Width: 2,
+              instFormat: ".word imm2_imm1_rs2_rs1_101_rd1_0001011",
+              commentFormat: " # ax.Fmul rd1, rs1, rs2",
+            },
+          ],
+          [
+            "ax.load",
+            {
+              rd1Required: true,
+              rs1Required: true,
+              rs2Required: true,
+              imm1Width: 5,
+              imm2Width: 2,
+              instFormat: ".word imm2_imm1_rs2_rs1_110_rd1_0001011",
+              commentFormat: " # ax.load rd1, imm1(rs1, rs2)",
+            },
+          ],
+          [
+            "ap.branch",
+            {
+              rd1Required: false,
+              rs1Required: false,
+              rs2Required: false,
+              imm1Width: 17,
+              imm2Width: 0,
+              instFormat: ".word imm1_011_00000_0001011",
+              commentFormat: " # ap.branch imm1",
+            },
+          ],
+          [
+            "ap.load",
+            {
+              rd1Required: true,
+              rs1Required: true,
+              rs2Required: false,
+              imm1Width: 12,
+              imm2Width: 0,
+              instFormat: ".word imm1_rs1_100_rd1_0001011",
+              commentFormat: " # ap.load rd1, imm1(rs1)",
+            },
+          ],
+        ]);
+
+        const opcodes = [
+          {
+            label: "ax",
+            options: ["ax.Fmul", "ax.load"],
+          },
+          {
+            label: "ap",
+            options: ["ap.branch", "ap.load"],
+          },
+        ];
+
+        const others = [
+          "zero ゼロ固定 (x0)",
+          "gp グローバルポインタ (x3)",
+          "tp スレッドポインタ (x4)",
+        ];
+
+        const intCallers = [
+          "t0 一時レジスタ・リンクレジスタ (x5)",
+          "t1 一時レジスタ (x6)",
+          "t2 一時レジスタ (x7)",
+          "t3 一時レジスタ (x28)",
+          "t4 一時レジスタ (x29)",
+          "t5 一時レジスタ (x30)",
+          "t6 一時レジスタ (x31)",
+          "ra リターンアドレス (x1)",
+          "a0 引数・戻り値レジスタ (x10)",
+          "a1 引数・戻り値レジスタ (x11)",
+          "a2 引数レジスタ (x12)",
+          "a3 引数レジスタ (x13)",
+          "a4 引数レジスタ (x14)",
+          "a5 引数レジスタ (x15)",
+          "a6 引数レジスタ (x16)",
+          "a7 引数レジスタ (x17)",
+        ];
+
+        const intCallees = [
+          "sp スタックポインタ (x2)",
+          "s0/fp 保存レジスタ・フレームポインタ (x8)",
+          "s1 保存レジスタ (x9)",
+          "s2 保存レジスタ (x18)",
+          "s3 保存レジスタ (x19)",
+          "s4 保存レジスタ (x20)",
+          "s5 保存レジスタ (x21)",
+          "s6 保存レジスタ (x22)",
+          "s7 保存レジスタ (x23)",
+          "s8 保存レジスタ (x24)",
+          "s9 保存レジスタ (x25)",
+          "s10 保存レジスタ (x26)",
+          "s11 保存レジスタ (x27)",
+        ];
+
+        const floatCallers = [
+          "ft0 浮動小数点一時レジスタ (f0)",
+          "ft1 浮動小数点一時レジスタ (f1)",
+          "ft2 浮動小数点一時レジスタ (f2)",
+          "ft3 浮動小数点一時レジスタ (f3)",
+          "ft4 浮動小数点一時レジスタ (f4)",
+          "ft5 浮動小数点一時レジスタ (f5)",
+          "ft6 浮動小数点一時レジスタ (f6)",
+          "ft7 浮動小数点一時レジスタ (f7)",
+          "ft8 浮動小数点一時レジスタ (f28)",
+          "ft9 浮動小数点一時レジスタ (f29)",
+          "ft10 浮動小数点一時レジスタ (f30)",
+          "ft11 浮動小数点一時レジスタ (f31)",
+          "fa0 浮動小数点引数・戻り値レジスタ (f10)",
+          "fa1 浮動小数点引数・戻り値レジスタ (f11)",
+          "fa2 浮動小数点引数レジスタ (f12)",
+          "fa3 浮動小数点引数レジスタ (f13)",
+          "fa4 浮動小数点引数レジスタ (f14)",
+          "fa5 浮動小数点引数レジスタ (f15)",
+          "fa6 浮動小数点引数レジスタ (f16)",
+          "fa7 浮動小数点引数レジスタ (f17)",
+        ];
+
+        const floatCallees = [
+          "fs0 浮動小数点保存レジスタ (f8)",
+          "fs1 浮動小数点保存レジスタ (f9)",
+          "fs2 浮動小数点保存レジスタ (f18)",
+          "fs3 浮動小数点保存レジスタ (f19)",
+          "fs4 浮動小数点保存レジスタ (f20)",
+          "fs5 浮動小数点保存レジスタ (f21)",
+          "fs6 浮動小数点保存レジスタ (f22)",
+          "fs7 浮動小数点保存レジスタ (f23)",
+          "fs8 浮動小数点保存レジスタ (f24)",
+          "fs9 浮動小数点保存レジスタ (f25)",
+          "fs10 浮動小数点保存レジスタ (f26)",
+          "fs11 浮動小数点保存レジスタ (f27)",
+        ];
+
+        const registers = [
+          ...others,
+          {
+            label: "呼び出し側が保存",
+            options: intCallers,
+          },
+          {
+            label: "関数側が保存",
+            options: intCallees,
+          },
+          {
+            label: "呼び出し側が保存",
+            options: floatCallers,
+          },
+          {
+            label: "関数側が保存",
+            options: floatCallees,
+          },
+        ];
+
+        const app = new Vue({
+          el: "#app",
+          data() {
+            return {
+              opcode: "",
+              opcodeOptions: [{ value: "", text: "opcode" }, ...opcodes],
+
+              rd1Text: "",
+              rd1Required: false,
+              rd1Options: [{ value: "", text: "rd1" }, ...registers],
+
+              rs1Text: "",
+              rs1Required: false,
+              rs1Options: [{ value: "", text: "rs1" }, ...registers],
+
+              rs2Text: "",
+              rs2Required: false,
+              rs2Options: [{ value: "", text: "rs2" }, ...registers],
+
+              imm1Text: "",
+              imm1Width: 0,
+
+              imm2Text: "",
+              imm2Width: 0,
+
+              instFormat: "",
+              instruction: "",
+
+              innerState: "",
+            };
+          },
+          computed: {
+            rd1() {
+              const matchArray = this.rd1Text.match(/\([xf](\d{1,2})\)/) || [];
+              const [rd1] = matchArray.slice(1, 2);
+              return +rd1;
+            },
+            rd1Name() {
+              const matchArray = this.rd1Text.match(/([^ ]+)/) || [];
+              const [rd1Name] = matchArray.slice(1, 2);
+              return rd1Name;
+            },
+            rs1() {
+              const matchArray = this.rs1Text.match(/\([xf](\d{1,2})\)/) || [];
+              const [rs1] = matchArray.slice(1, 2);
+              return +rs1;
+            },
+            rs1Name() {
+              const matchArray = this.rs1Text.match(/([^ ]+)/) || [];
+              const [rs1Name] = matchArray.slice(1, 2);
+              return rs1Name;
+            },
+            rs2() {
+              const matchArray = this.rs2Text.match(/\([xf](\d{1,2})\)/) || [];
+              const [rs2] = matchArray.slice(1, 2);
+              return +rs2;
+            },
+            rs2Name() {
+              const matchArray = this.rs2Text.match(/([^ ]+)/) || [];
+              const [rs2Name] = matchArray.slice(1, 2);
+              return rs2Name;
+            },
+            imm1() {
+              if (this.imm1Text === "" || this.imm1Width === 0) return 0;
+              return Math.trunc(+this.imm1Text);
+            },
+            imm1Valid() {
+              if (this.imm1Width === 0) return null;
+              const imm1 = this.imm1;
+              return imm1 >= 0 && imm1 < 1 << this.imm1Width;
+            },
+            imm2() {
+              if (this.imm2Text === "" || this.imm2Width === 0) return 0;
+              return Math.trunc(+this.imm2Text);
+            },
+            imm2Valid() {
+              if (this.imm2Width === 0) return null;
+              const imm2 = this.imm2;
+              return imm2 >= 0 && imm2 < 1 << this.imm2Width;
+            },
+          },
+          methods: {
+            updateFormWithSpec() {
+              const {
+                rd1Required,
+                rs1Required,
+                rs2Required,
+                imm1Width,
+                imm2Width,
+                instFormat,
+                commentFormat,
+              } = fieldSpecs.get(this.opcode);
+
+              this.rd1Required = rd1Required;
+              this.rs1Required = rs1Required;
+              this.rs2Required = rs2Required;
+              this.imm1Width = imm1Width;
+              this.imm2Width = imm2Width;
+              this.instFormat = instFormat;
+              this.commentFormat = commentFormat;
+            },
+            formatInstruction() {
+              const valueMap = new Map(
+                [
+                  this.rd1Required && ["rd1", { value: this.rd1, width: 5 }],
+                  this.rs1Required && ["rs1", { value: this.rs1, width: 5 }],
+                  this.rs2Required && ["rs2", { value: this.rs2, width: 5 }],
+                  this.imm1Width && [
+                    "imm1",
+                    { value: this.imm1, width: this.imm1Width },
+                  ],
+                  this.imm2Width && [
+                    "imm2",
+                    { value: this.imm2, width: this.imm2Width },
+                  ],
+                ].filter(Boolean)
+              );
+
+              let instruction = this.instFormat.replaceAll("_", "");
+              for (const [key, { value, width }] of valueMap.entries()) {
+                instruction = instruction.replace(
+                  key,
+                  value.toString(2).padStart(width, "0")
+                );
+              }
+
+              const nameMap = new Map(
+                [
+                  this.rd1Required && ["rd1", this.rd1Name],
+                  this.rs1Required && ["rs1", this.rs1Name],
+                  this.rs2Required && ["rs2", this.rs2Name],
+                  this.imm1Width && ["imm1", this.imm1],
+                  this.imm2Width && ["imm2", this.imm2],
+                ].filter(Boolean)
+              );
+
+              let comment = this.commentFormat;
+              for (const [key, value] of nameMap.entries()) {
+                comment = comment.replace(key, `${value}`);
+              }
+              this.instruction = instruction + comment;
+
+              const valueObject = Object.fromEntries(valueMap);
+              this.innerState = JSON.stringify(valueObject, null, 4);
+            },
+          },
+          created() {
+            document.addEventListener("keydown", (event) => {
+              if (event.keyCode === 13) {
+                event.preventDefault();
+                this.formatInstruction();
+              }
+            });
+          },
+        });
+      }
+    </script>
+  </body>
+</html>
