@@ -32,7 +32,7 @@
   <body>
     <div id="app">
       <div class="mx-auto my-4 p-2 w-75 border rounded d-flex">
-        <div class="mr-2 d-flex flex-column">
+        <div class="mr-2 d-flex flex-column flex-fill">
           <b-input-group class="mb-2" prepend="inst">
             <b-form-select
               v-model="opcode"
@@ -316,8 +316,6 @@
 
               instFormat: "",
               instruction: "",
-
-              innerState: "",
             };
           },
           computed: {
@@ -368,6 +366,23 @@
               if (this.imm2Width === 0) return null;
               const imm2 = this.imm2;
               return imm2 >= 0 && imm2 < 1 << this.imm2Width;
+            },
+            innerState() {
+              return {
+                opcode: this.opcode,
+                rd1Required: this.rd1Required,
+                rd1: this.rd1,
+                rs1Required: this.rs1Required,
+                rs1: this.rs1,
+                rs2Required: this.rs2Required,
+                rs2: this.rs2,
+                imm1Width: this.imm1Width,
+                imm1: this.imm1,
+                imm2Width: this.imm2Width,
+                imm2: this.imm2,
+                instFormat: this.instFormat,
+                commentFormat: this.commentFormat,
+              };
             },
           },
           methods: {
@@ -430,9 +445,6 @@
                 comment = comment.replace(key, `${value}`);
               }
               this.instruction = instruction + comment;
-
-              const valueObject = Object.fromEntries(valueMap);
-              this.innerState = JSON.stringify(valueObject, null, 4);
             },
           },
           created() {
